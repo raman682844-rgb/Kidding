@@ -1,0 +1,68 @@
+name: macOS VNC via Bore (Stable)
+
+on:
+  workflow_dispatch:
+    inputs:
+      connection_method:
+        description: "Connection method"
+        required: true
+        default: "bore"
+        type: choice
+        options:
+          - bore
+
+jobs:
+  macos-vnc:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240   # 4 hours
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virt-manager curl unzip
+
+    - name: Install Bore
+      run: |
+        curl -fsSL https://github.com/ekzhang/bore/releases/latest/download/bore-linux-amd64 -o bore
+        chmod +x bore
+        sudo mv bore /usr/local/bin/bore
+        bore --version
+
+    - name: Download macOS-Simple-KVM
+      run: |
+        git clone https://github.com/foxlet/macOS-Simple-KVM.git
+        cd macOS-Simple-KVM
+
+    - name: Prepare macOS VM
+      run: |
+        cd macOS-Simple-KVM
+        ./jumpstart.sh --mojave
+
+    - name: Start macOS VM (VNC on 5900)
+      run: |
+        cd macOS-Simple-KVM
+        nohup ./basic.sh > vm.log 2>&1 &
+        sleep 20
+
+    - name: Expose VNC Port 5900 with Bore
+      run: |
+        nohup bore local 5900 --to bore.pub > bore.log 2>&1 &
+        sleep 5
+        echo "===== BORE LOG ====="
+        cat bore.log
+
+    - name: Display VNC Connection Info & Keep Alive
+      run: |
+        echo "=================================="
+        echo "VNC CONNECTION INFORMATION"
+        echo "Connection Method : Bore"
+        echo "VNC Port          : 5900"
+        echo "----------------------------------"
+        grep -o 'bore.pub:[0-9]*' bore.log || echo "Waiting for bore address..."
+        echo "=================================="
+        echo "Session will stay alive..."
+        sleep 14400
